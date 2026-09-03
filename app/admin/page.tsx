@@ -25,6 +25,11 @@ export default function AdminPage() {
   const [chapterTitle, setChapterTitle] = useState('');
   const [pagesFiles, setPagesFiles] = useState<FileList | null>(null);
 
+  // Gerenciamento de Capítulos Existentes
+  const [manageMangaId, setManageMangaId] = useState('');
+  const [chaptersList, setChaptersList] = useState<any[]>([]);
+  const [loadingChapters, setLoadingChapters] = useState(false);
+
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,10 +37,29 @@ export default function AdminPage() {
     fetchMangas();
   }, []);
 
+  useEffect(() => {
+    if (manageMangaId) {
+      fetchChapters(manageMangaId);
+    } else {
+      setChaptersList([]);
+    }
+  }, [manageMangaId]);
+
   const fetchMangas = async () => {
     const { data } = await supabase.from('mangas').select('*').order('created_at', { ascending: false });
     if (data) setMangas(data);
     setLoading(false);
+  };
+
+  const fetchChapters = async (mangaId: string) => {
+    setLoadingChapters(true);
+    const { data } = await supabase
+      .from('chapters')
+      .select('*')
+      .eq('manga_id', mangaId)
+      .order('chapter_number', { ascending: false });
+    if (data) setChaptersList(data);
+    setLoadingChapters(false);
   };
 
   const uploadFile = async (file: File, bucketName: string) => {
@@ -123,6 +147,9 @@ export default function AdminPage() {
       setChapterNumber('');
       setChapterTitle('');
       setPagesFiles(null);
+      if (manageMangaId === selectedMangaId) {
+        fetchChapters(manageMangaId);
+      }
     } catch (err: any) {
       setMessage(`❌ Erro: ${err.message}`);
     } finally {
@@ -134,6 +161,22 @@ export default function AdminPage() {
     if (!confirm('Deseja excluir este mangá e todos os capítulos?')) return;
     await supabase.from('mangas').delete().eq('id', id);
     fetchMangas();
+  };
+
+  const handleDeleteChapter = async (chapterId: string, chapterNum: number) => {
+    if (!confirm(`Deseja realmente excluir o Capítulo ${chapterNum}?`)) return;
+    
+    try {
+      // As páginas são deletadas automaticamente em cascata se configurado no banco, 
+      // mas garantimos a exclusão do capítulo
+      const { error } = await supabase.from('chapters').delete().eq('id', chapterId);
+      if (error) throw error;
+
+      setMessage(`🗑️ Capítulo ${chapterNum} excluído com sucesso!`);
+      if (manageMangaId) fetchChapters(manageMangaId);
+    } catch (err: any) {
+      setMessage(`❌ Erro ao excluir capítulo: ${err.message}`);
+    }
   };
 
   return (
@@ -341,6 +384,53 @@ export default function AdminPage() {
           </section>
         </div>
 
+        {/* Gerenciar Capítulos Existentes (Exclusão) */}
+        <section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-lg font-bold border-b border-gray-800 pb-3 text-pink-500 flex items-center gap-2">
+            <BookOpen size={20} /> Gerenciar / Excluir Capítulos
+          </h2>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Selecione o Mangá para ver os capítulos</label>
+            <select
+              value={manageMangaId}
+              onChange={(e) => setManageMangaId(e.target.value)}
+              className="w-full bg-[#0f0f12] border border-gray-800 rounded-lg p-2.5 outline-none focus:border-pink-500 text-sm"
+            >
+              <option value="">Selecione uma obra...</option>
+              {mangas.map((m) => (
+                <option key={m.id} value={m.id}>{m.title}</option>
+              ))}
+            </select>
+          </div>
+
+          {manageMangaId && (
+            <div className="space-y-2 mt-4 max-h-60 overflow-y-auto pr-2">
+              {loadingChapters ? (
+                <p className="text-sm text-gray-500">Carregando capítulos...</p>
+              ) : chaptersList.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum capítulo cadastrado nesta obra ainda.</p>
+              ) : (
+                chaptersList.map((chap) => (
+                  <div key={chap.id} className="flex justify-between items-center bg-[#0f0f12] p-3 rounded-xl border border-gray-800 text-sm">
+                    <div>
+                      <span className="font-bold">Capítulo {chap.chapter_number}</span>
+                      {chap.title && <span className="text-gray-400 text-xs ml-2">- {chap.title}</span>}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteChapter(chap.id, chap.chapter_number)}
+                      className="text-red-400 hover:text-red-300 p-2 hover:bg-red-500/10 rounded-lg transition"
+                      title="Excluir capítulo"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+
         {/* Gerenciar Obras Existentes */}
         <section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-bold border-b border-gray-800 pb-3 text-pink-500">
@@ -375,4 +465,4 @@ export default function AdminPage() {
       </main>
     </div>
   );
-} 
+}
