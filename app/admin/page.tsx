@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Navbar from '@/app/components/Navbar';
 import { PlusCircle, Upload, BookOpen, Layers, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { FolderUp } from 'lucide-react';
 
 export default function AdminPage() {
   const [mangas, setMangas] = useState<any[]>([]);
@@ -383,6 +385,26 @@ export default function AdminPage() {
             </form>
           </section>
         </div>
+
+                {/* Atalho para Importação em Massa */}
+<div className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4 mt-6">
+  <div className="flex justify-between items-center">
+    <div>
+      <h2 className="text-lg font-bold text-pink-500 flex items-center gap-2">
+        <FolderUp size={20} /> Importação em Massa de Pastas
+      </h2>
+      <p className="text-xs text-gray-400 mt-1">
+        Envie centenas de capítulos organizados em pastas de forma automatizada.
+      </p>
+    </div>
+    <Link
+      href="/bulk-import"
+      className="bg-pink-600 hover:bg-pink-700 text-white font-bold px-5 py-3 rounded-xl transition flex items-center gap-2 text-sm shadow-lg flex-shrink-0"
+    >
+      <FolderUp size={18} /> Abrir Importador
+    </Link>
+  </div>
+</div>
 
         {/* Gerenciar Capítulos Existentes (Exclusão) */}
         <section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
