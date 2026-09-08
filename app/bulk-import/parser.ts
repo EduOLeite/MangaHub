@@ -1,97 +1,71 @@
 export interface ParsedPage {
-  fileName: string;
-  file: File;
   pageNumber: number;
+  file: File;
 }
 
 export interface ParsedChapter {
-  chapterNumber: number;
-  chapterTitle: string;
   folderName: string;
+  chapterNumber: number;
+  chapterTitle: string | null;
   pages: ParsedPage[];
-  status: 'ready' | 'error' | 'exists';
+  status: 'ready' | 'exists' | 'error';
   errorMessage?: string;
 }
 
-// Extrai o número do capítulo do nome da pasta (ex: "0001", "Capítulo 1500", "001 - O Retorno")
-export function parseChapterNumber(folderName: string): { number: number | null; title: string } {
-  // Tenta encontrar um número na string
-  const cleanName = folderName.trim();
-  
-  // Regex para achar números (suporta decimais como 1500 ou 1.5, 10.1)
-  const match = cleanName.match(/(?:cap|capitulo|vol|volume)?[\s_-]*(\d+(?:\.\d+)?)/i);
-  
-  if (!match) {
-    return { number: null, title: cleanName };
-  }
-
-  const chapterNumber = parseFloat(match[1]);
-
-  // Tenta extrair um título opcional se houver hífen ou texto após o número (ex: "1500 - O Último Combate")
-  let title = cleanName;
-  const parts = cleanName.split(/[-–—]/);
-  if (parts.length > 1) {
-    title = parts.slice(1).join('-').trim();
-  }
-
-  return { number: chapterNumber, title: title || `Capítulo ${chapterNumber}` };
-}
-
-// Ordena e filtra os arquivos de imagem corretamente (1, 2, 3 ... 10 e não 1, 10, 2)
-export async function parseChapterFolder(dirHandle: FileSystemDirectoryHandle): Promise<ParsedChapter> {
-  const { number: chapterNumber, title: chapterTitle } = parseChapterNumber(dirHandle.name);
+export async function parseChapterFolder(dirHandle: any): Promise<ParsedChapter> {
+  const folderName = dirHandle.name;
   const pages: ParsedPage[] = [];
 
-  if (chapterNumber === null) {
-    return {
-      chapterNumber: 0,
-      chapterTitle: dirHandle.name,
-      folderName: dirHandle.name,
-      pages: [],
-      status: 'error',
-      errorMessage: 'Não foi possível identificar o número do capítulo no nome da pasta.'
-    };
-  }
+  try {
+    // Tenta extrair o número do capítulo do nome da pasta (ex: "Capitulo 001" ou "Capitulo 217" ou final da string)
+    const matchChapter = folderName.match(/(?:Cap[ií]tulo|Cap\.?)\s*(\d+(?:\.\d+)?)/i);
+    let chapterNumber = 0;
 
-  // Lê os arquivos de dentro da subpasta do capítulo
-  for await (const [name, handle] of (dirHandle as any).entries()) {
-    if (handle.kind === 'file') {
-      const ext = name.split('.').pop()?.toLowerCase();
-      if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) {
-        const file: File = await handle.getFile();
-        
-        // Tenta extrair o número da página do nome do arquivo (ex: "001.jpg" -> 1)
-        const pageMatch = name.match(/(\d+)/);
-        const pageNumber = pageMatch ? parseInt(pageMatch[1], 10) : pages.length + 1;
+    if (matchChapter) {
+      chapterNumber = parseFloat(matchChapter[1]);
+    } else {
+      // Fallback: pega o último número encontrado na string se não achar a palavra capítulo
+      const numbers = folderName.match(/\d+/g);
+      chapterNumber = numbers ? parseFloat(numbers[numbers.length - 1]) : 0;
+    }
 
-        pages.push({
-          fileName: name,
-          file,
-          pageNumber,
-        });
+    // Extrai um título limpo se houver algo além do capítulo (opcional)
+    let chapterTitle: string | null = null;
+
+    // Varre os arquivos de imagem de dentro da pasta do capítulo
+    for await (const [fileName, fileHandle] of dirHandle.entries()) {
+      if (fileHandle.kind === 'file') {
+        const file = await fileHandle.getFile();
+        if (file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|avif)$/i.test(fileName)) {
+          pages.push({ pageNumber: 0, file });
+        }
       }
     }
-  }
 
-  if (pages.length === 0) {
+    // Ordena as páginas alfabeticamente pelo nome do arquivo (ex: pagina_01.jpg, pagina_02.jpg)
+    pages.sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
+
+    // Reatribui o número sequencial correto da página (1, 2, 3...)
+    pages.forEach((p, index) => {
+      p.pageNumber = index + 1;
+    });
+
     return {
+      folderName,
       chapterNumber,
       chapterTitle,
-      folderName: dirHandle.name,
+      pages,
+      status: pages.length > 0 ? 'ready' : 'error',
+      errorMessage: pages.length === 0 ? 'Nenhuma imagem encontrada na pasta.' : undefined,
+    };
+  } catch (err: any) {
+    return {
+      folderName,
+      chapterNumber: 0,
+      chapterTitle: null,
       pages: [],
       status: 'error',
-      errorMessage: 'Nenhuma imagem válida encontrada na pasta do capítulo.'
+      errorMessage: err.message || 'Erro ao ler os arquivos.',
     };
   }
-
-  // Ordena as páginas numericamente de forma estrita
-  pages.sort((a, b) => a.pageNumber - b.pageNumber);
-
-  return {
-    chapterNumber,
-    chapterTitle,
-    folderName: dirHandle.name,
-    pages,
-    status: 'ready',
-  };
 }

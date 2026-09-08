@@ -7,6 +7,101 @@ import { PlusCircle, Upload, BookOpen, Layers, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { FolderUp } from 'lucide-react';
 
+// Componente auxiliar para editar cada capítulo na lista
+function ChapterEditItem({ chapter, onUpdate }: { chapter: any; onUpdate: () => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [chapNum, setChapNum] = useState(chapter.chapter_number);
+  const [chapTitle, setChapTitle] = useState(chapter.title || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('chapters')
+      .update({
+        chapter_number: parseFloat(chapNum),
+        title: chapTitle || null,
+      })
+      .eq('id', chapter.id);
+
+    setSaving(false);
+    if (error) {
+      alert(`Erro ao atualizar: ${error.message}`);
+    } else {
+      setIsEditing(false);
+      onUpdate();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Deseja realmente excluir o Capítulo ${chapter.chapter_number}?`)) return;
+    const { error } = await supabase.from('chapters').delete().eq('id', chapter.id);
+    if (error) alert(`Erro ao excluir: ${error.message}`);
+    else onUpdate();
+  };
+
+  return (
+    <div className="bg-[#0f0f12] p-3 rounded-xl border border-gray-800 text-sm flex flex-col gap-2">
+      {isEditing ? (
+        <div className="flex flex-col md:flex-row gap-2 items-center">
+          <input
+            type="number"
+            step="0.1"
+            value={chapNum}
+            onChange={(e) => setChapNum(e.target.value)}
+            className="w-24 bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white"
+            placeholder="Número"
+          />
+          <input
+            type="text"
+            value={chapTitle}
+            onChange={(e) => setChapTitle(e.target.value)}
+            className="flex-1 bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white"
+            placeholder="Título (Opcional)"
+          />
+          <div className="flex gap-2">
+            <button 
+              onClick={handleSave} 
+              disabled={saving}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-bold"
+            >
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button 
+              onClick={() => setIsEditing(false)} 
+              className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex justify-between items-center">
+          <div>
+            <span className="font-bold text-pink-400">Capítulo {chapter.chapter_number}</span>
+            {chapter.title && <span className="text-gray-400 text-xs ml-2">- {chapter.title}</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-blue-400 hover:text-blue-300 text-xs bg-blue-900/20 px-2.5 py-1 rounded border border-blue-800/40 transition"
+            >
+              Editar
+            </button>
+            <button
+              onClick={handleDelete}
+              className="text-red-400 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded transition"
+              title="Excluir capítulo"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [mangas, setMangas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -406,52 +501,44 @@ export default function AdminPage() {
   </div>
 </div>
 
-        {/* Gerenciar Capítulos Existentes (Exclusão) */}
-        <section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-bold border-b border-gray-800 pb-3 text-pink-500 flex items-center gap-2">
-            <BookOpen size={20} /> Gerenciar / Excluir Capítulos
-          </h2>
+        {/* Gerenciar Capítulos Existentes (Edição e Exclusão) */}
+<section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
+  <h2 className="text-lg font-bold border-b border-gray-800 pb-3 text-pink-500 flex items-center gap-2">
+    <BookOpen size={20} /> Gerenciar / Editar Capítulos
+  </h2>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Selecione o Mangá para ver os capítulos</label>
-            <select
-              value={manageMangaId}
-              onChange={(e) => setManageMangaId(e.target.value)}
-              className="w-full bg-[#0f0f12] border border-gray-800 rounded-lg p-2.5 outline-none focus:border-pink-500 text-sm"
-            >
-              <option value="">Selecione uma obra...</option>
-              {mangas.map((m) => (
-                <option key={m.id} value={m.id}>{m.title}</option>
-              ))}
-            </select>
-          </div>
+  <div>
+    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Selecione o Mangá para gerenciar os capítulos</label>
+    <select
+      value={manageMangaId}
+      onChange={(e) => setManageMangaId(e.target.value)}
+      className="w-full bg-[#0f0f12] border border-gray-800 rounded-lg p-2.5 outline-none focus:border-pink-500 text-sm"
+    >
+      <option value="">Selecione uma obra...</option>
+      {mangas.map((m) => (
+        <option key={m.id} value={m.id}>{m.title}</option>
+      ))}
+    </select>
+  </div>
 
-          {manageMangaId && (
-            <div className="space-y-2 mt-4 max-h-60 overflow-y-auto pr-2">
-              {loadingChapters ? (
-                <p className="text-sm text-gray-500">Carregando capítulos...</p>
-              ) : chaptersList.length === 0 ? (
-                <p className="text-sm text-gray-500">Nenhum capítulo cadastrado nesta obra ainda.</p>
-              ) : (
-                chaptersList.map((chap) => (
-                  <div key={chap.id} className="flex justify-between items-center bg-[#0f0f12] p-3 rounded-xl border border-gray-800 text-sm">
-                    <div>
-                      <span className="font-bold">Capítulo {chap.chapter_number}</span>
-                      {chap.title && <span className="text-gray-400 text-xs ml-2">- {chap.title}</span>}
-                    </div>
-                    <button
-                      onClick={() => handleDeleteChapter(chap.id, chap.chapter_number)}
-                      className="text-red-400 hover:text-red-300 p-2 hover:bg-red-500/10 rounded-lg transition"
-                      title="Excluir capítulo"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </section>
+  {manageMangaId && (
+    <div className="space-y-3 mt-4 max-h-80 overflow-y-auto pr-2">
+      {loadingChapters ? (
+        <p className="text-sm text-gray-500">Carregando capítulos...</p>
+      ) : chaptersList.length === 0 ? (
+        <p className="text-sm text-gray-500">Nenhum capítulo cadastrado nesta obra ainda.</p>
+      ) : (
+        chaptersList.map((chap) => (
+          <ChapterEditItem 
+            key={chap.id} 
+            chapter={chap} 
+            onUpdate={() => fetchChapters(manageMangaId)} 
+          />
+        ))
+      )}
+    </div>
+  )}
+</section>
 
         {/* Gerenciar Obras Existentes */}
         <section className="bg-[#16161c] border border-gray-800 rounded-2xl p-6 space-y-4">
